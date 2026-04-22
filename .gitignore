@@ -30,3 +30,8 @@ frontend/*
 
 # DS Store
 .DS_Store
+
+codebase_db/
+__pycache__/
+
+.env
