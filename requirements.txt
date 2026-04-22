@@ -1,2 +1,2 @@
 sentence-transformers
-requests
+chromadb

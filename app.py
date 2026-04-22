@@ -1,12 +1,16 @@
-import requests
+import chromadb
 from sentence_transformers import SentenceTransformer
-import time
 
 # 1. Load the AI Model
 print("Loading AI model...")
 model = SentenceTransformer('all-MiniLM-L6-v2')
 
-# 2. Knowledge Base
+# 2. Setup the Vector Database (Local)
+# This creates a folder on your computer to act as the DB
+client = chromadb.PersistentClient(path="./my_vector_db")
+collection = client.get_or_create_collection(name="tech_docs")
+
+# 3. Your Knowledge Data
 docs = [
     "To start a Spring Boot app, use the command: mvn spring-boot:run",
     "Java interfaces define a contract that classes must implement.",
@@ -14,36 +18,29 @@ docs = [
     "Use 'git clone' to download a repository from GitHub to your computer."
 ]
 
-ENDEE_URL = "http://localhost:8080"
+# 4. Add data to the Database
+print("Adding knowledge to the database...")
+embeddings = model.encode(docs).tolist()
+ids = [f"id_{i}" for i in range(len(docs))]
 
-# 3. Adding knowledge
-print("Adding knowledge to Endee...")
-for i, text in enumerate(docs):
-    vector = model.encode(text).tolist()
-    payload = {
-        "id": str(i),
-        "vector": vector,
-        "metadata": {"content": text}
-    }
-    
-    # Try the 'endee' default collection path
-    response = requests.post(f"{ENDEE_URL}/api/v1/endee/insert", json=payload)
-    print(f"Status for doc_{i}: {response.status_code}")
+collection.add(
+    embeddings=embeddings,
+    documents=docs,
+    ids=ids
+)
 
-time.sleep(1)
-
-# 4. Search
+# 5. Perform the Search
 query = "How do I run a spring boot project?"
 print(f"\nSearching for: '{query}'")
 
-query_vector = model.encode(query).tolist()
-search_payload = {"vector": query_vector, "top_k": 1}
+query_embedding = model.encode(query).tolist()
+results = collection.query(
+    query_embeddings=[query_embedding],
+    n_results=1
+)
 
-try:
-    # Try the 'endee' default collection path
-    response = requests.post(f"{ENDEE_URL}/api/v1/endee/search", json=search_payload)
-    print("Match Found:", response.text)
-except Exception as e:
-    print("Search failed. Error:", e)
+print("\n--- Search Result ---")
+print(f"Closest Match: {results['documents'][0][0]}")
+print(f"Confidence Score: {results['distances'][0][0]}")
 
 print("\n--- Project Complete! ---")
