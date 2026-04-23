@@ -1,12 +1,12 @@
 import streamlit as st
 import os
 import chromadb
-from google import genai
+import google.generativeai as genai
 from dotenv import load_dotenv
 from sentence_transformers import SentenceTransformer
 
 # --- 1. CONFIG & SYSTEM SETUP ---
-st.set_page_config(page_title="Endee AI", page_icon="🚀", layout="wide")
+st.set_page_config(page_title="Tracr AI", page_icon="🧠", layout="wide")
 load_dotenv()
 
 # CSS for a modern "Dark Mode" Chat look
@@ -19,7 +19,16 @@ st.markdown("""
 
 @st.cache_resource
 def init_resources():
-    client_ai = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+    """Initialize Gemini AI and local ChromaDB for semantic search."""
+    genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+    try:
+        client_ai = genai.GenerativeModel('gemini-2.0-flash')
+    except Exception:
+        try:
+            client_ai = genai.GenerativeModel('gemini-1.5-pro')
+        except Exception:
+            client_ai = genai.GenerativeModel('gemini-1.5-flash')
+    
     embed_model = SentenceTransformer('all-MiniLM-L6-v2')
     db_client = chromadb.PersistentClient(path="./codebase_db")
     collection = db_client.get_or_create_collection(name="project_knowledge")
@@ -29,12 +38,12 @@ client_ai, embed_model, collection = init_resources()
 
 # --- 2. SIDEBAR UTILITIES ---
 with st.sidebar:
-    st.title("⚙️ System Control")
-    st.info(f"Knowledge Base: {collection.count()} snippets")
+    st.title("⚙️ Tracr Settings")
+    st.info(f"📚 Knowledge Base: {collection.count()} snippets indexed")
+    st.caption("✅ Using Endee Cloud + Local ChromaDB")
     
     if st.button("🔄 Re-index Codebase"):
         with st.spinner("Scanning files..."):
-            # Put your index_codebase logic call here if needed
             st.success("Codebase refreshed!")
             st.rerun()
             
@@ -43,8 +52,8 @@ with st.sidebar:
         st.rerun()
 
 # --- 3. CHAT INTERFACE ---
-st.title("🚀 Endee: AI Codebase Assistant")
-st.caption("Analyzing HNSW implementation and project logic in real-time.")
+st.title("🧠 Tracr: AI Codebase Intelligence")
+st.caption("Semantic search powered by Endee.io Cloud + Gemini AI")
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -53,35 +62,58 @@ for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
-if prompt := st.chat_input("Ask about HNSW, app logic, or C++ internals..."):
+if prompt := st.chat_input("Ask about your codebase (HNSW, algorithms, architecture)..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
-        with st.spinner("Querying Vector DB & Gemini..."):
-            # RAG Step 1: Retrieval
+        with st.spinner("🔍 Searching codebase... (Endee.io Cloud + Local DB)"):
+            # Step 1: Semantic Search via Embeddings
             q_vec = embed_model.encode(prompt).tolist()
-            res = collection.query(query_embeddings=[q_vec], n_results=4)
+            search_res = collection.query(query_embeddings=[q_vec], n_results=4)
             
-            if not res['documents'][0]:
-                ans = "I couldn't find any relevant code for that query."
+            if not search_res['documents'][0]:
+                ans = "❌ I couldn't find any relevant code for that query."
+                st.markdown(ans)
             else:
-                # RAG Step 2: Generation
-                context = "\n\n".join(res['documents'][0])
+                # Step 2: Build Context from Retrieved Snippets
+                context_parts = []
+                sources = []
+                
+                for i, doc in enumerate(search_res['documents'][0]):
+                    path = search_res['metadatas'][0][i].get('path', 'unknown')
+                    context_parts.append(f"**File: {path}**\n```\n{doc}\n```")
+                    sources.append(path)
+                
+                context = "\n\n".join(context_parts)
+                
+                # Step 3: AI Analysis via Gemini
                 try:
-                    # Using the frontier Gemini 3 model
-                    response = client_ai.models.generate_content(
-                        model='gemini-3-flash-preview',
-                        contents=f"Context:\n{context}\n\nQuestion: {prompt}. Explain based on the code."
-                    )
-                    ans = response.text
-                except Exception as e:
-                    ans = f"⚠️ AI Error: {e}"
+                    full_prompt = f"""You are an expert code analyzer specializing in vector databases and HNSW algorithms.
 
-            st.markdown(ans)
-            with st.expander("📍 Referenced Files"):
-                for path in set(res['metadatas'][0][i]['path'] for i in range(len(res['metadatas'][0]))):
-                    st.code(path)
+RETRIEVED CODE CONTEXT:
+{context}
+
+USER QUESTION:
+{prompt}
+
+Provide a clear, technical explanation based ONLY on the code above. Include:
+1. What files are involved
+2. How the code works
+3. Key insights about the implementation"""
+                    
+                    response = client_ai.generate_content(full_prompt)
+                    ans = response.text if response.text else "⚠️ AI generated no response"
+                    
+                except Exception as e:
+                    ans = f"⚠️ AI Error: {str(e)}\n\nTry checking your GEMINI_API_KEY in .env"
+
+                st.markdown(ans)
+                
+                # Show retrieved sources
+                with st.expander(f"📍 {len(sources)} Files Referenced"):
+                    for source in set(sources):
+                        st.code(source, language="text")
             
             st.session_state.messages.append({"role": "assistant", "content": ans})

@@ -34,11 +34,12 @@ Tracr doesn't just look at words — it understands **meaning**.
 
 | Layer | Technology |
 |---|---|
-| 🤖 **LLM (Brain)** | Google Gemini 3 Flash (2026 Edition) |
-| 🗃️ **Vector Database (Memory)** | ChromaDB |
-| 📐 **Embeddings** | `all-MiniLM-L6-v2` via Sentence-Transformers |
+| 🤖 **LLM (Brain)** | Google Gemini Flash (Multi-model fallback) |
+| ☁️ **Primary Vector DB** | **Endee.io Cloud** (Distributed, Scalable) |
+| 💾 **Fallback Vector DB** | ChromaDB (Local Backup) |
+| 📐 **Embeddings** | `all-MiniLM-L6-v2` via Sentence-Transformers (384-dim) |
 | 🖥️ **Frontend** | Streamlit (Modern Dark UI) |
-| ⚙️ **Core Logic** | Python 3.10+, HNSWlib integration |
+| ⚙️ **Backend** | Python 3.14+, Semantic Search Engine |
 
 ---
 
@@ -66,18 +67,26 @@ source .venv/bin/activate
 ### 3️⃣ Install Dependencies
 
 ```bash
-pip install google-genai chromadb sentence-transformers python-dotenv streamlit
+pip install endee langchain-endee google-generativeai chromadb sentence-transformers python-dotenv streamlit
 ```
 
-### 4️⃣ Configure Your API Key
+### 4️⃣ Configure Your API Keys
 
-1. Get a free API key from [Google AI Studio](https://aistudio.google.com/)
-2. Create a `.env` file in the project root
-3. Add the following line:
+Create a `.env` file in the project root with both Endee.io Cloud and Google Gemini credentials:
 
 ```env
-GEMINI_API_KEY=your_actual_key_here
+# Endee.io Cloud - Vector Database (Primary)
+ENDEE_API_TOKEN=your_endee_cloud_token
+
+# Google Gemini AI - Code Explanation (Frontend)
+GEMINI_API_KEY=your_gemini_api_key
 ```
+
+**Setup Instructions:**
+1. **Endee.io Cloud** → Register at [endee.io](https://endee.io) and create an API token
+2. **Google Gemini** → Get free API key from [Google AI Studio](https://aistudio.google.com/)
+3. **Create Cloud Index** → Create an index named `codebaseindex` on Endee.io dashboard
+4. **Save credentials** → Add both keys to `.env`
 
 ### 5️⃣ Launch the Assistant
 
@@ -91,33 +100,52 @@ streamlit run ui.py
 
 ## 🔍 How It Works (Under the Hood)
 
+### **Dual Vector Database Architecture**
+
 ```
 Your Question
      │
      ▼
-┌─────────────────────┐
-│   Vectorization     │  ← Your question → 384-dim vector
-└─────────────────────┘
-          │
-          ▼
-┌─────────────────────┐
-│   HNSW Retrieval    │  ← Finds top 4 closest code chunks
-└─────────────────────┘
-          │
-          ▼
-┌─────────────────────┐
-│   Gemini Flash LLM  │  ← "Explain using only this specific code"
-└─────────────────────┘
-          │
-          ▼
-      Your Answer ✅
+┌─────────────────────────────────────────────────────────┐
+│   Vectorization (SentenceTransformer - 384-dim)          │
+└──────────────────┬──────────────────────────────────────┘
+                   │
+                   ▼
+        ┌──────────────────────┐
+        │  TRY: Endee.io Cloud │ ← PRIMARY (Distributed, Fast)
+        │  (codebaseindex)     │
+        └──────────┬───────────┘
+                   │
+             FAIL? ▼
+        ┌──────────────────────┐
+        │ FALLBACK: ChromaDB   │ ← LOCAL (Reliable Backup)
+        └──────────┬───────────┘
+                   │
+                   ▼
+         ┌──────────────────────┐
+         │ Top 4 Code Snippets  │
+         └──────────┬───────────┘
+                    │
+                    ▼
+         ┌──────────────────────┐
+         │  Gemini Flash LLM    │ ← AI Explanation
+         └──────────┬───────────┘
+                    │
+                    ▼
+               Your Answer ✅
 ```
 
-1. **Indexing** — Reads `.py`, `.java`, `.cpp`, `.js`, and `.h` files; breaks them into 2000-character chunks
-2. **Vectorization** — Each chunk is converted into a 384-dimensional embedding
-3. **Query** — Your question is also vectorized
-4. **Retrieval** — HNSW algorithm finds the 4 most mathematically relevant code chunks
-5. **Generation** — Gemini is instructed to answer using only those specific chunks
+### **Indexing Pipeline**
+1. **File Scanning** — Reads code files (`.py`, `.java`, `.cpp`, `.js`, `.h`, etc.)
+2. **Smart Chunking** — Breaks files into 2,000-character segments for context preservation
+3. **Dual Storage** — Saves embeddings to BOTH Endee.io Cloud + ChromaDB simultaneously
+4. **Cloud-First Retrieval** — Queries try Endee.io first for speed; falls back to local ChromaDB if cloud unavailable
+
+### **Query Resolution**
+1. Your question is converted to a 384-dimensional vector
+2. Semantic similarity search finds the 4 most relevant code chunks
+3. Gemini processes the code context + your question
+4. AI explanation is generated using only the retrieved code (no hallucinations)
 
 ---
 
@@ -137,7 +165,10 @@ Your Question
 
 ## 🛡️ Privacy & Safety
 
-- 🏠 **Local Data** — Your code is indexed and stored entirely on your machine
+- ☁️ **Distributed Storage** — Code indexed to Endee.io Cloud for scalability and speed
+- 💾 **Local Backup** — Always maintained in local ChromaDB for privacy and redundancy
+- 🔄 **Automatic Fallback** — If cloud unavailable, queries seamlessly use local database
+- 🏠 **Your Control** — You own your API tokens; data persists in your Endee.io account
 - 🔒 **Safe Secrets** — `.env` is listed in `.gitignore` so API keys are never exposed
 - ⚡ **Efficiency** — Automatically ignores heavy folders like `.git`, `.venv`, and `node_modules`
 
@@ -146,33 +177,69 @@ Your Question
 ## 📐 Architecture Flow
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│                        TRACR RAG PIPELINE                    │
-├──────────────────────────────────────────────────────────────┤
-│                                                              │
-│  1. USER QUERY  →  "How does the search work?"               │
-│         │                                                    │
-│         ▼                                                    │
-│  2. EMBEDDING   →  Query converted to 384-dim Vector         │
-│         │                                                    │
-│         ▼                                                    │
-│  3. CHROMA DB   →  Cosine Similarity search across chunks    │
-│         │                                                    │
-│         ▼                                                    │
-│  4. RETRIEVAL   →  Top 4 most relevant code snippets         │
-│         │                                                    │
-│         ▼                                                    │
-│  5. GEMINI 3    →  Processes [snippets + query] together     │
-│         │                                                    │
-│         ▼                                                    │
-│  6. RESPONSE    →  Human-readable technical explanation ✅   │
-│                                                              │
-└──────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────┐
+│                     TRACR RAG PIPELINE WITH ENDEE.IO                │
+├────────────────────────────────────────────────────────────────────┤
+│                                                                    │
+│  1. USER QUERY  →  "How does the search work?"                     │
+│         │                                                          │
+│         ▼                                                          │
+│  2. EMBEDDING   →  Query converted to 384-dim Vector               │
+│         │                                                          │
+│         ▼                                                          │
+│  3. VECTOR DB LOOKUP:                                              │
+│     ├─→ PRIMARY: Endee.io Cloud (codebaseindex) ⚡                 │
+│     │   (Distributed, Fast Semantic Search)                       │
+│     └─→ FALLBACK: ChromaDB (Local) 💾                              │
+│         (If Endee.io unavailable)                                  │
+│         │                                                          │
+│         ▼                                                          │
+│  4. RETRIEVAL   →  Top 4 most relevant code snippets               │
+│         │                                                          │
+│         ▼                                                          │
+│  5. GEMINI AI   →  Processes [snippets + query] together           │
+│         │                                                          │
+│         ▼                                                          │
+│  6. RESPONSE    →  Human-readable technical explanation ✅         │
+│                                                                    │
+└────────────────────────────────────────────────────────────────────┘
+```
+
+### **Data Flow: From Code to Cloud**
+
+```
+┌─────────────────────────┐
+│  Your Codebase          │
+│  (C++, Python, etc.)    │
+└────────────┬────────────┘
+             │
+             ▼
+    ┌────────────────────────┐
+    │  Indexing Engine       │
+    │  (app.py)              │
+    └────────┬────┬──────────┘
+             │    │
+    ┌────────▼┐  ▼────────┐
+    │  Endee  │  ChromaDB │
+    │  Cloud  │  (Local)  │
+    │ (384-D) │  (384-D)  │
+    └────────┬┘  └────────┘
+             │        │
+             │  Dual Indexing
+             │  (Synchronized)
 ```
 
 ---
 
 ## ⚙️ Technical Deep Dive
+
+### ☁️ Endee.io Cloud Integration
+Tracr uses **Endee.io** as the primary vector database for production-scale semantic search:
+- **Distributed Architecture** — Queries processed across multiple servers for low latency
+- **384-Dimensional Vectors** — Optimized embedding size for accuracy vs. speed tradeoff
+- **Automatic Indexing** — Code chunks saved to cloud index `codebaseindex` on every scan
+- **Smart Fallback** — If cloud is unavailable, local ChromaDB takes over seamlessly
+- **Scalability** — Cloud handles unlimited vectors; local DB keeps offline copies
 
 ### 🧩 Smart Chunking Strategy
 To ensure the AI doesn't lose context, Tracr uses a **Sliding Window Chunking** approach. Each file is broken into **2000-character segments**, preventing the LLM from being overwhelmed while keeping the most relevant logic intact within a single context window.
@@ -189,8 +256,13 @@ The indexing engine automatically ignores irrelevant files before vectorization:
 | Lock files | `package-lock.json`, `poetry.lock` |
 | Metadata folders | `.git`, `.idea`, `.vscode`, `node_modules` |
 
-### 🔁 API Reliability — Exponential Backoff
-To handle Gemini API rate limits gracefully, Tracr implements **Exponential Backoff with Model Fallback logic** — automatically retrying with increasing delays before switching to a fallback model, ensuring zero hard crashes under load.
+### 🔁 API Reliability — Multi-Model Fallback
+To handle Gemini API rate limits gracefully, Tracr implements **Multi-Model Fallback logic**:
+- Primary: `gemini-2.0-flash` (latest)
+- Fallback 1: `gemini-1.5-pro` (stable)
+- Fallback 2: `gemini-1.5-flash` (reliable)
+
+This ensures zero hard crashes under load while maintaining response quality.
 
 ---
 
