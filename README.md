@@ -15,31 +15,33 @@ Whether you're navigating complex C++ algorithms like **HNSW** or trying to unde
 ## ❓ The Problem & The Solution
 
 ### The Problem
-In large projects, finding *where* a specific logic lives is frustrating.
 
-Standard `Ctrl+F` only works if you know the exact keyword. Searching *"How does the database save data?"* returns zero results — because the code uses terms like `persist()` or `commit()`.
+In large projects, finding _where_ a specific logic lives is frustrating.
+
+Standard `Ctrl+F` only works if you know the exact keyword. Searching _"How does the database save data?"_ returns zero results — because the code uses terms like `persist()` or `commit()`.
 
 ### The Solution
+
 Tracr doesn't just look at words — it understands **meaning**.
 
-| Feature | Description |
-|---|---|
-| 🔍 **Semantic Search** | Converts code into mathematical "vectors" (embeddings) |
-| 🏗️ **RAG Architecture** | Retrieves relevant snippets and feeds them to Gemini Flash |
+| Feature                        | Description                                                      |
+| ------------------------------ | ---------------------------------------------------------------- |
+| 🔍 **Semantic Search**         | Converts code into mathematical "vectors" (embeddings)           |
+| 🏗️ **RAG Architecture**        | Retrieves relevant snippets and feeds them to Gemini Flash       |
 | 🧩 **Contextual Intelligence** | "Reads" your specific files before answering — no hallucinations |
 
 ---
 
 ## 🛠️ Tech Stack
 
-| Layer | Technology |
-|---|---|
-| 🤖 **LLM (Brain)** | Google Gemini Flash (Multi-model fallback) |
-| ☁️ **Primary Vector DB** | **Endee.io Cloud** (Distributed, Scalable) |
-| 💾 **Fallback Vector DB** | ChromaDB (Local Backup) |
-| 📐 **Embeddings** | `all-MiniLM-L6-v2` via Sentence-Transformers (384-dim) |
-| 🖥️ **Frontend** | Streamlit (Modern Dark UI) |
-| ⚙️ **Backend** | Python 3.14+, Semantic Search Engine |
+| Layer                     | Technology                                             |
+| ------------------------- | ------------------------------------------------------ |
+| 🤖 **LLM (Brain)**        | Google Gemini Flash (Multi-model fallback)             |
+| ☁️ **Primary Vector DB**  | **Endee.io Cloud** (Distributed, Scalable)             |
+| 💾 **Fallback Vector DB** | ChromaDB (Local Backup)                                |
+| 📐 **Embeddings**         | `all-MiniLM-L6-v2` via Sentence-Transformers (384-dim) |
+| 🖥️ **Frontend**           | Streamlit (Modern Dark UI)                             |
+| ⚙️ **Backend**            | Python 3.14+, Semantic Search Engine                   |
 
 ---
 
@@ -83,6 +85,7 @@ GEMINI_API_KEY=your_gemini_api_key
 ```
 
 **Setup Instructions:**
+
 1. **Endee.io Cloud** → Register at [endee.io](https://endee.io) and create an API token
 2. **Google Gemini** → Get free API key from [Google AI Studio](https://aistudio.google.com/)
 3. **Create Cloud Index** → Create an index named `codebaseindex` on Endee.io dashboard
@@ -136,12 +139,14 @@ Your Question
 ```
 
 ### **Indexing Pipeline**
+
 1. **File Scanning** — Reads code files (`.py`, `.java`, `.cpp`, `.js`, `.h`, etc.)
 2. **Smart Chunking** — Breaks files into 2,000-character segments for context preservation
 3. **Dual Storage** — Saves embeddings to BOTH Endee.io Cloud + ChromaDB simultaneously
 4. **Cloud-First Retrieval** — Queries try Endee.io first for speed; falls back to local ChromaDB if cloud unavailable
 
 ### **Query Resolution**
+
 1. Your question is converted to a 384-dimensional vector
 2. Semantic similarity search finds the 4 most relevant code chunks
 3. Gemini processes the code context + your question
@@ -234,7 +239,9 @@ Your Question
 ## ⚙️ Technical Deep Dive
 
 ### ☁️ Endee.io Cloud Integration
+
 Tracr uses **Endee.io** as the primary vector database for production-scale semantic search:
+
 - **Distributed Architecture** — Queries processed across multiple servers for low latency
 - **384-Dimensional Vectors** — Optimized embedding size for accuracy vs. speed tradeoff
 - **Automatic Indexing** — Code chunks saved to cloud index `codebaseindex` on every scan
@@ -242,22 +249,27 @@ Tracr uses **Endee.io** as the primary vector database for production-scale sema
 - **Scalability** — Cloud handles unlimited vectors; local DB keeps offline copies
 
 ### 🧩 Smart Chunking Strategy
+
 To ensure the AI doesn't lose context, Tracr uses a **Sliding Window Chunking** approach. Each file is broken into **2000-character segments**, preventing the LLM from being overwhelmed while keeping the most relevant logic intact within a single context window.
 
 ### ⚡ Vector Space Efficiency
+
 The `all-MiniLM-L6-v2` model generates dense **384-dimensional embeddings** — a deliberate "sweet spot" between search accuracy and processing speed. This keeps the assistant responsive even on consumer-grade hardware without sacrificing retrieval quality.
 
 ### 🛡️ Noise Reduction via Clean-Sweep Filter
+
 The indexing engine automatically ignores irrelevant files before vectorization:
 
-| Category | Examples Filtered |
-|---|---|
-| Compiled binaries | `.exe`, `.o`, `.class` |
-| Lock files | `package-lock.json`, `poetry.lock` |
-| Metadata folders | `.git`, `.idea`, `.vscode`, `node_modules` |
+| Category          | Examples Filtered                          |
+| ----------------- | ------------------------------------------ |
+| Compiled binaries | `.exe`, `.o`, `.class`                     |
+| Lock files        | `package-lock.json`, `poetry.lock`         |
+| Metadata folders  | `.git`, `.idea`, `.vscode`, `node_modules` |
 
 ### 🔁 API Reliability — Multi-Model Fallback
+
 To handle Gemini API rate limits gracefully, Tracr implements **Multi-Model Fallback logic**:
+
 - Primary: `gemini-2.0-flash` (latest)
 - Fallback 1: `gemini-1.5-pro` (stable)
 - Fallback 2: `gemini-1.5-flash` (reliable)
@@ -282,9 +294,10 @@ This project was built to bridge the gap between **low-level code** and **high-l
 
 It is a strong demonstration of **AI Engineering**, **Vector Databases**, and **System Design thinking** — ideal for technical recruitment showcases and senior developer workflows.
 
-> 🎯 **Resume Tip:** List this under a *"GenAI & System Design"* header and highlight:
-> - *"Engineered a Vector-based Retrieval system to reduce LLM hallucination in technical contexts."*
-> - *"Solved API rate-limiting via Exponential Backoff and Model Fallback logic."*
+> 🎯 **Resume Tip:** List this under a _"GenAI & System Design"_ header and highlight:
+>
+> - _"Engineered a Vector-based Retrieval system to reduce LLM hallucination in technical contexts."_
+> - _"Solved API rate-limiting via Exponential Backoff and Model Fallback logic."_
 
 ---
 
